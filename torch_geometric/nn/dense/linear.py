@@ -150,7 +150,7 @@ class Linear(torch.nn.Module):
     def initialize_parameters(self, module, input):
         if is_uninitialized_parameter(self.weight):
             self.in_channels = input[0].size(-1)
-            self.weight.materialize((self.out_channels, self.in_channels))
+            self.weight.materialize((self.out_channels, self.in_channels), device=input[0].device)
             self.reset_parameters()
         self._hook.remove()
         delattr(self, '_hook')
