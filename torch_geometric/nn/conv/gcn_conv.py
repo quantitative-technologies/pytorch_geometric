@@ -1,4 +1,4 @@
-from typing import Optional
+from typing import Any, Optional
 
 import torch
 from torch import Tensor
@@ -112,6 +112,10 @@ def gcn_norm(  # noqa: F811
 
     return edge_index, edge_weight
 
+def is_uninitialized_parameter(x: Any) -> bool:
+    if not hasattr(torch.nn.parameter, 'UninitializedParameter'):
+        return False
+    return isinstance(x, torch.nn.parameter.UninitializedParameter)
 
 class GCNConv(MessagePassing):
     r"""The graph convolutional operator from the `"Semi-supervised
@@ -211,7 +215,10 @@ class GCNConv(MessagePassing):
                           weight_initializer='glorot')
 
         if bias:
-            self.bias = Parameter(torch.empty(out_channels))
+            #self.bias = Parameter(torch.empty(out_channels))
+            self.bias = torch.nn.parameter.UninitializedParameter()
+            self._hook = self.register_forward_pre_hook(
+                self.initialize_parameters)
         else:
             self.register_parameter('bias', None)
 
@@ -266,6 +273,15 @@ class GCNConv(MessagePassing):
             out = out + self.bias
 
         return out
+ 
+    @torch.no_grad()
+    def initialize_parameters(self, module, input):
+        if is_uninitialized_parameter(self.bias):
+            self.bias.materialize((self.out_channels), device=input[0].device)
+            self.reset_parameters()
+        self._hook.remove()
+        delattr(self, '_hook')
+
 
     def message(self, x_j: Tensor, edge_weight: OptTensor) -> Tensor:
         return x_j if edge_weight is None else edge_weight.view(-1, 1) * x_j
